@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Control</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #009fff;
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            margin-top: 20px;
+        }
+
+        .btn-toggle {
+            width: 150px;
+            margin-right: 10px;
+        }
+
+        .btn-action {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-6">
+                <img src="{{ url_for('video_feed') }}" class="img-fluid" alt="Camera Feed">
+            </div>
+            <div class="col-md-6">
+                <div class="btn-group-toggle" data-toggle="buttons">
+                    <label class="btn btn-primary btn-toggle active">
+                        <input type="checkbox" autocomplete="off" id="trackingToggle"> Tracking
+                    </label>
+                    <label class="btn btn-primary btn-toggle active">
+                        <input type="checkbox" autocomplete="off" id="recordingToggle"> Recording
+                    </label>
+                    <label class="btn btn-primary btn-toggle active">
+                        <input type="checkbox" autocomplete="off" id="autorecToggle"> AutoRec
+                    </label>
+                </div>
+                <div class="form-group mt-3">
+                    <label for="zoomValue">Zoom Value (0-30)</label>
+                    <input type="number" class="form-control" id="zoomValue" min="0" max="100">
+                    <button class="btn btn-primary btn-action mt-2" onclick="updateZoom()">OK</button>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-primary btn-action" onclick="calibratePosition()">Calibrate Position</button>
+                    <button class="btn btn-primary btn-action" onclick="calibrateHeading()">Calibrate Heading</button>
+                </div>
+                <div class="mt-3">
+                    <p class="mt-2">Adjust Calibration</p>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-primary" onclick="adjustCalibration('decrement')">Left</button>
+                        <button class="btn btn-primary" onclick="adjustCalibration('increment')">Right</button>
+                        <button class="btn btn-primary" onclick="adjustCalibration('tilt_offset_minus')">Up</button>
+                        <button class="btn btn-primary" onclick="adjustCalibration('tilt_offset_plus')">Down</button>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-danger btn-action" onclick="shutdownSurf()">Shutdown</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script>
+        function updateZoom() {
+            var zoomValue = parseInt(document.getElementById('zoomValue').value);
+            fetch('/update_zoom_value', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ zoom_value: zoomValue })
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Zoom value updated successfully.');
+                } else {
+                    console.error('Failed to update zoom value.');
+                }
+            });
+        }
+
+        function setAutofocus() {
+            fetch('/set_autofocus', {
+                method: 'POST'
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Autofocus set successfully.');
+                } else {
+                    console.error('Failed to set autofocus.');
+                }
+            });
+        }
+
+        function calibratePosition() {
+            fetch('/calibrate_position', {
+                method: 'POST'
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Position calibrated successfully.');
+                } else {
+                    console.error('Failed to calibrate position.');
+                }
+            });
+        }
+
+        function calibrateHeading() {
+            fetch('/calibrate_heading', {
+                method: 'POST'
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Heading calibrated successfully.');
+                } else {
+                    console.error('Failed to calibrate heading.');
+                }
+            });
+        }
+
+        function adjustCalibration(action) {
+            fetch('/' + action, {
+                method: 'POST'
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Calibration adjusted successfully.');
+                } else {
+                    console.error('Failed to adjust calibration.');
+                }
+            });
+        }
+
+        function shutdownSurf() {
+            fetch('/shutdown_surf', {
+                method: 'GET'
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Shutdown command sent.');
+                } else {
+                    console.error('Failed to send shutdown command.');
+                }
+            });
+        }
+
+        document.getElementById('trackingToggle').addEventListener('change', function () {
+            var newState = this.checked;
+            fetch(newState ? '/start_tracking' : '/stop_tracking', {
+                method: 'POST'
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Tracking ' + (newState ? 'started' : 'stopped') + ' successfully.');
+                } else {
+                    console.error('Failed to ' + (newState ? 'start' : 'stop') + ' tracking.');
+                }
+            });
+        });
+
+        document.getElementById('recordingToggle').addEventListener('change', function () {
+            var newState = this.checked;
+            fetch(newState ? '/start_recording' : '/stop_recording', {
+                method: 'POST'
+            }).then(response => {
+                if (response.ok) {
+                    console.log('Recording ' + (newState ? 'started' : 'stopped') + ' successfully.');
+                } else {
+                    console.error('Failed to ' + (newState ? 'start' : 'stop') + ' recording.');
+                }
+            });
+        });
+
+
+        document.getElementById('autorecToggle').addEventListener('change', function () {
+            var newState = this.checked;
+            fetch(newState ? '/enable_autorec' : '/disable_autorec', {
+                method: 'POST'
+            }).then(response => {
+                if (response.ok) {
+                    console.log('AutoRecording ' + (newState ? 'started' : 'stopped') + ' successfully.');
+                } else {
+                    console.error('Failed to ' + (newState ? 'start' : 'stop') + ' recording.');
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
