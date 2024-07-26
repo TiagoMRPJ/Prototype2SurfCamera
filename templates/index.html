@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Camera Control</title>
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/css/bootstrap.min.css">
     <style>
         body {
             background-color: #009fff;
@@ -29,11 +29,6 @@
 </head>
 
 <body>
-    <div class="container">
-        <div class="row">
-            <div class="col-md-6">
-                <img src="{{ url_for('video_feed') }}" class="img-fluid" alt="Camera Feed">
-            </div>
             <div class="col-md-6">
                 <div class="btn-group-toggle" data-toggle="buttons">
                     <label class="btn btn-primary btn-toggle active">
@@ -71,9 +66,9 @@
         </div>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="{{ url_for('static', filename='../js/jquery.min.js') }}"></script>
+    <script src="/js/popper.min.js"></script>
+    <script src="/js/bootstrap.min.js"></script>
     <script>
         function updateZoom() {
             var zoomValue = parseInt(document.getElementById('zoomValue').value);

@@ -18,12 +18,17 @@ IO = GPIO.FrontBoardDriver()
 Zoom = ZoomController.SoarCameraZoomFocus()
 
 distance_zoom_table = {
-    1:1,        
-    70:1,
-    100:3,
-    150:5,      # Example: 150 Meters corresponds to a x5 zoom
-    225:15,
-    800:30
+    1:1,
+    15:1,
+    25:2,
+    50:4,
+    75:4.5,
+    100:5,
+    120:7,
+    140:9,
+    160:11,
+    215:13,
+    300:15
     # Add as many mappings as needed, making sure they are ordered
 }
 
@@ -44,18 +49,7 @@ def gpsDistance(lat1, lon1, lat2, lon2):
 	distance = 6371 * c
 	return distance
 
-#   Used for pan speed calculation
-last_read = 0
-read_time = 0
-pan_speed = 0
-old_rotation = 0
-rotation = 0
-servo_rotation = 0
-tilt = 0
-first_prediction = True
-speed_time = 0
-
-trackDistX = 5 # Initiated as non zero to avoid errors 
+trackDistX = 1 # Initiated as non zero just to avoid errors 
 
 def calibrationCoordsCal():
     '''
@@ -72,19 +66,15 @@ def calibrationCoordsCal():
         
     avg_lat = np.average(calibrationBufferLAT)
     avg_lon = np.average(calibrationBufferLON)
-    print("Camera Calibration Complete")
-
+    
     return avg_lat, avg_lon
                 
 def panCalculations():
     locationToTrack = Location(gps_points.latest_gps_data['latitude'], gps_points.latest_gps_data['longitude'])
     locationOrigin = Location(gps_points.camera_origin['latitude'], gps_points.camera_origin['longitude'])
-    print(f"Goal {locationToTrack}; Origin {locationOrigin}; ")
     rotation = -np.degrees(utils.get_angle_between_locations(locationOrigin, locationToTrack) - gps_points.camera_heading_angle)
-    print(f"Rotation before normalize {rotation}")
     rotation = normalize_angle(rotation)
     rotation = round(rotation, 1) # Round to 1 decimal place
-    print(f"Rotation after normalize {rotation}")
     return rotation
 
 def tiltCalculations():
@@ -94,12 +84,12 @@ def tiltCalculations():
     trackDistY = gps_points.camera_vertical_distance
     tiltAngle = np.degrees(math.atan2(trackDistX, trackDistY)) - 90
     tiltAngle = round(tiltAngle, 1) # Round to 1 decimal place
-    return tiltAngle
+    return -tiltAngle
 
 def zoomCalculations():
     global trackDistX
     
-    # Find between which 2 mapped values trackDistx fits. This supposes distance_zoom_table is sorted
+    # Find between which 2 mapped values trackDistx fits. This assumes distance_zoom_table is sorted
     lower_distance = max([d for d in distance_zoom_table if d <= trackDistX], default=None)
     upper_distance = min([d for d in distance_zoom_table if d >= trackDistX], default=None)
     
@@ -116,17 +106,15 @@ def zoomCalculations():
         Zoom.set_zoom_position(new_zoom_level)
         commands.camera_zoom_value = new_zoom_level
     
-def calculate_pan_speed(current_rotation, last_rotation, time_interval):
-    # Calculate the difference in angles and divide by the time interval
-    angle_difference = normalize_angle(current_rotation - last_rotation)
-    return angle_difference / time_interval
-        
+       
 def get_calibration_from_file():
     try:
         with open("calibration_data", 'r+') as file:
             data = json.load(file)  # Load the JSON data
-            gps_points.camera_origin['latitude'] = data.get('originlat')
-            gps_points.camera_origin['longitude'] = data.get('originlon')
+            gps_points.camera_origin = {
+                                            "latitude": data.get('originlat'),
+                                            "longitude": data.get('originlon')
+                                        }
             gps_points.camera_heading_angle = data.get('heading_angle')
             return data
     except FileNotFoundError:
@@ -148,12 +136,14 @@ def update_calibration_file(key, value):
             print(f"Error writing to the file calibration_data: {e}")
 
 def main(d):
-    last_rotation = None
-    last_time = None
-    speed_threshold = 1  # Define a threshold for significant speed
-    stop_duration_threshold = 5  # Number of seconds to stop recording after panning stops
-    stop_timer = 0
-    speed_buffer = deque(maxlen=8)  # Buffer to store the last 8 speed measurements
+    panAngle = None
+    last_read_time = None
+    panSpeed = None
+    panBuffer = deque(maxlen=4)
+    timeBuffer = deque(maxlen=4)
+    
+    commands.tracking_enabled = False
+    
     if get_calibration_from_file(): # Gets the last calibration from a txt file
         print("Calibration data retrieved from file successfully")
     else:
@@ -162,12 +152,15 @@ def main(d):
     while True:
         time.sleep(0.01)
         IO.setBackPanelLEDs(first = gps_points.gps_fix, second = gps_points.transmission_fix)
-        
         if commands.camera_calibrate_origin:        # Calibrate the camera origin coordinate
             commands.camera_calibrate_origin = False
             avg_lat, avg_lon = calibrationCoordsCal()
-            gps_points.camera_origin['latitude'] = avg_lat
-            gps_points.camera_origin['longitude'] = avg_lon
+            print(avg_lat)
+            print(avg_lon)
+            gps_points.camera_origin = {
+                                        'latitude': avg_lat,
+                                        'longitude': avg_lon
+                                        }
             print(f"Camera Origin {gps_points.camera_origin['latitude']}, {gps_points.camera_origin['longitude']} Calibrated")
             update_calibration_file('originlat', avg_lat)
             update_calibration_file('originlon', avg_lon)
@@ -176,8 +169,10 @@ def main(d):
         elif commands.camera_calibrate_heading:       # Calibrate the camera heading coordinate
             commands.camera_calibrate_heading = False
             avg_lat, avg_lon = calibrationCoordsCal()
-            gps_points.camera_heading_coords['latitude'] = avg_lat
-            gps_points.camera_heading_coords['longitude'] = avg_lon
+            gps_points.camera_heading_coords = {
+                                        'latitude': avg_lat,
+                                        'longitude': avg_lon
+                                        }
             cam_position = Location(gps_points.camera_origin['latitude'], gps_points.camera_origin['longitude'])
             cam_heading = Location(gps_points.camera_heading_coords['latitude'], gps_points.camera_heading_coords['longitude'])
             gps_points.camera_heading_angle = utils.get_angle_between_locations(cam_position, cam_heading)
@@ -189,14 +184,43 @@ def main(d):
             print("Camera Heading Calibration Complete")
         
         if commands.tracking_enabled:
+                
             if gps_points.new_reading:
                 gps_points.new_reading = False
                 panAngle = panCalculations()
                 tiltAngle = tiltCalculations()
                 zoomCalculations()
-                IO.setAngles(pan = panAngle, tilt = tiltAngle + gps_points.tilt_offset)
+                #IO.setAngles(pan = panAngle, tilt = tiltAngle + gps_points.tilt_offset)
                 print(f"Pan: {panAngle} ; Tilt: {tiltAngle + gps_points.tilt_offset}")
+                
+                last_read_time = time.time()
+                
+                # Before appending the new value check if it follows the previous Trend
+                # If it does, append it to the array and continue as is
+                # If not, sudden change of direction or stop has occured -> clear buffer and start filling
+                if tendency(panAngle, panBuffer):
+                    panBuffer.append(panAngle)
+                    timeBuffer.append(last_read_time)   
+                    panSpeed = average_pan_speed(panBuffer, timeBuffer)
+                else:
+                    #print("CHANGE OF DIRECTION OR SUDDEN STOP HAVE BEEN DETECTED, CLEARING TENDENCY BUFFERS")
+                    panBuffer.clear()
+                    timeBuffer.clear()
+                    panBuffer.append(panAngle)
+                    timeBuffer.append(last_read_time)   
+                    panSpeed = average_pan_speed(panBuffer, timeBuffer)
+                
+                    
+            '''
+            Trend following for Pan smoothing at considerable speeds
+            '''
+            if panSpeed and abs(panSpeed) > 0.5 and abs(panSpeed) < 20 and time.time() - last_read_time >= 0.1:
+                panAngle = panAngle + panSpeed * 1 * (time.time() - last_read_time)
+                last_read_time = time.time()
+                IO.setAngles(pan = panAngle, tilt = tiltAngle + gps_points.tilt_offset)
         
+        
+                ''' #Possible auto-recording pseudo implementation
                 if last_rotation is not None and last_time is not None and cam_state.enable_auto_recording:
                     # Calculate the time interval
                     current_time = time.time()
@@ -227,13 +251,60 @@ def main(d):
                     # Update last rotation and time
                     last_rotation = panAngle
                     last_time = current_time
+                '''
+                    
         else:
             IO.setAngles(pan = 0, tilt= 0)
-            #Zoom.set_zoom_position(25)
-            if cam_state.start_recording:
-                cam_state.start_recording = False
-                print("Stop recording due to tracking disabled")
+            Zoom.set_zoom_position(2)
+
             
-                        
+def average_pan_speed(pan_values, timestamps):
+    if len(pan_values) != len(timestamps):
+        raise ValueError("PAN values and timestamps arrays must be of the same length.")
+    
+    if len(pan_values) < 2:
+        return 0
+    
+    total_distance = 0
+    total_time = 0
+    
+    for i in range(1, len(pan_values)):
+        distance = pan_values[i] - pan_values[i - 1]
+        time = timestamps[i] - timestamps[i - 1]
+        
+        if time <= 0:
+            raise ValueError("Timestamps must be in increasing order and have positive intervals.")
+        
+        total_distance += distance
+        total_time += time
+    
+    average_speed = total_distance / total_time
+    return average_speed
+
+def tendency(value, array):
+    '''
+    Checks if a new value to be inserted follows the general tendency of the array
+    '''
+    
+    if len(array) < 2:  # too little values, assume no trend and return True to immeditely keep appending the array 
+        return True
+    
+    diffs = [array[i] - array[i-1] for i in range(1, len(array))]
+    if all(d > 0 for d in diffs):
+        tendency = 1     # there is a tendency (sign doesnt matter) so return True to keep appending
+    elif all(d < 0 for d in diffs):
+        tendency = -1    # No clear trend in values, return False to immediately clear the array
+
+    last_val = array[-1]
+    
+    if(tendency == 1 and value < last_val) or (tendency == -1 and value > last_val):    # New val does not follow trend
+        return False
+    
+    return True # this means the new value follows the trend --> return True
+        
+                  
+    
+    
+          
 if __name__ == "__main__":
     main({"stop": False}) 

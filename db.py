@@ -48,16 +48,16 @@ class RedisClient:
 class GPSData:
     def  __init__(self, connection):
         self.client = RedisClient(connection)
-        self.client.set_initial("camera_origin", { "latitude": 0, "longitude": 0 })          # Coordinates of the camera's location -> Calibrate to change this
-        self.client.set_initial("camera_heading_coords", { "latitude": 0, "longitude": 0})   # Coordinates of camera's 0º heading -> Calibrate to change this
-        self.client.set_initial("camera_heading_angle", 0)
+        #self.client.set_initial("camera_origin", { "latitude": 0, "longitude": 0 })          # Coordinates of the camera's location -> Calibrate to change this
+        #self.client.set_initial("camera_heading_coords", { "latitude": 0, "longitude": 0})   # Coordinates of camera's 0º heading -> Calibrate to change this
+        #self.client.set_initial("camera_heading_angle", 0)
         self.client.set_initial("latest_gps_data", { "latitude": 0, "longitude": 0})         # Latest coordinates received from the Tracker
         self.client.set_initial("reads_per_second", 0)                                       # Variable to store how many readings per second we're taking from the radio
         self.client.set_initial("gps_fix", False)                                            # Flag to indicate th
         self.client.set_initial("transmission_fix", False)  
         self.client.set_initial("new_reading", False)                 # Flag to indicate a new reading has come in
-        self.client.set_initial("tilt_offset", 0 )                      # Used to manually fine adjust tilt calibration
-        self.client.set_initial("camera_vertical_distance", 3.5)        # Variable to store the fixed value of the camera vertical position 
+        self.client.set_initial("tilt_offset", 0 )                    # Used to manually fine adjust tilt calibration
+        self.client.set_initial("camera_vertical_distance", 2)        # Variable to store the fixed value of the camera vertical position 
         
     @property
     def camera_origin(self):
@@ -179,6 +179,7 @@ class CameraState:
         self.client.set_initial("start_recording", False)
         self.client.set_initial("is_recording", False)
         self.client.set_initial("enable_auto_recording", False)
+        self.client.set_initial("timeStamp", 0)
 
     @property
     def is_recording(self):
@@ -211,3 +212,11 @@ class CameraState:
     @enable_auto_recording.setter
     def enable_auto_recording(self, v):
         self.client.set("enable_auto_recording", v)
+        
+    @property
+    def timeStamp(self):
+        return self.client.get("timeStamp")
+
+    @timeStamp.setter
+    def timeStamp(self, v):
+        self.client.set("timeStamp", v)

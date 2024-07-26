@@ -105,7 +105,7 @@ def main(d):
 				time_new_read = time.time()
 				position = {"latitude": float(lastLat), "longitude": float(lastLon)}
 				gps_points.latest_gps_data = position
-				print(f"{lastLat}, {lastLon}, {sats}, {rssi}")
+				print(f"{gps_points.latest_gps_data['latitude']}, {gps_points.latest_gps_data['longitude']}, {sats}, {rssi}")
     
 				if sats >= 3:
 					gps_points.gps_fix = True
@@ -115,8 +115,9 @@ def main(d):
 				gps_points.new_reading = True
 				newRead = False
     
-				if camera_state.is_recording:
-					with open('gps_data.txt', 'a+') as f:
+				if camera_state.is_recording and False:
+					print("IS RECORDING - GPS IS LOOGING")
+					with open(f'/home/IDMind/Documents/Prototype2SurfCamera/gps_logs/{camera_state.timeStamp}.txt', 'a+') as f:
 						f.write(f"{lastLat}, {lastLon}\n")
 
 			

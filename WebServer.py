@@ -2,8 +2,9 @@ import json
 from flask import render_template, Flask, send_from_directory, Response, jsonify, request
 from flask_cors import CORS
 import time
-import Zoom 
-
+import Zoom
+import cv2 
+import subprocess 
 import db
 
 def main(d):
@@ -85,12 +86,12 @@ def main(d):
 
     @app.route('/tilt_offset_plus', methods=['POST'])
     def tilt_offset_plus():
-        gps_points.tilt_offset += 1
+        gps_points.tilt_offset += 0.25
         return jsonify({"success": True, "message": "Values Updated!"})
 
     @app.route('/tilt_offset_minus', methods=['POST'])
     def tilt_offset_minus():
-        gps_points.tilt_offset -= 1
+        gps_points.tilt_offset -= 0.25
         return jsonify({"success": True, "message": "Values Updated!"})
     
 
@@ -107,13 +108,14 @@ def main(d):
         print("flask calibrate_heading")
         commands.camera_calibrate_heading = True
         return jsonify({ "success": True, "message": "OK" })
+
     
     def gen():
         """Video streaming generator function."""
         while True:
             yield camera_state.image
             time.sleep(0.15)
-
+ 
     @app.route('/video_feed')
     def video_feed():
         """Video streaming route. Put this in the src attribute of an img tag."""
@@ -123,6 +125,10 @@ def main(d):
     def shutdown_surf():
         """Route to shutdown system"""
         from subprocess import call
+        import IOBoardDriver as IO
+        frontboard = IO.FrontBoardDriver()
+        frontboard.setShutdown(seconds=10)
+        time.sleep(1)
         call("sudo shutdown -h now", shell=True)
         return jsonify({ "success": True, "message": "OK" })
     

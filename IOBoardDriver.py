@@ -43,6 +43,7 @@ class FrontBoardDriver:
         self.dynamixelWrite(1, 76, 3200) # Tilt velocity gains
         self.dynamixelWrite(1, 78, 180)
         self.setTiltPID(750, 500, 1000)
+        self.setPanPID(400,0, 200)
         self.turnOnTorque()
         _, _, panpos, _ = self.bulkReadPosVel() # Used to find out the center zero position of the pan
         self.PanCenterPulse = panpos        
@@ -67,7 +68,7 @@ class FrontBoardDriver:
             Returns: [0xff ,0xff ,op_code ,data_lenght ,data ,high_value ,low_value]
             Receives: 
         """
-        header = self.serial.read(2)                              #HEADERS (0xff, 0xff)
+        header = self.serial.read(2)                              # HEADERS (0xff, 0xff)
         
         if len(header) < 2 or header[:2] != b'\xff\xff' :         # Check if header corresponds to expected
             err_msg = "Error with headers {}".format(header)
@@ -188,8 +189,6 @@ class FrontBoardDriver:
         bytes_val = seconds.to_bytes(2, 'little') 
         self.bsr_message(self.command_codes["Set Shutdown"], [bytes_val])
         time.sleep(1)
-        from subprocess import call
-        call("sudo shutdown -h now", shell=True)
         
     def bulkReadTemp(self):
         response = self.bsr_message(self.command_codes["Bulk Temperature Read"], [0x00])
@@ -437,6 +436,13 @@ class FrontBoardDriver:
         data2send = bytearray(msg)
         response = self.bsr_message(self.command_codes["Group Dynamixel Write"], data2send)
         print("Tilt PID Parameters Updated")
+        
+    def int_to_signed_bytes(self, value, length):
+        # Check if the integer is negative
+        if value < 0:
+            # Calculate the two's complement of the negative number
+            value = (1 << (length * 8)) + value
+        return value.to_bytes(length, byteorder='little')
 
     def groupDynamixelSetPosition(self, tiltpos=None, tiltvel=None, panpos=None, panvel=None):
         NCOMMANDS = 0
@@ -473,7 +479,7 @@ class FrontBoardDriver:
             ADDR_BYTES = ADDR.to_bytes(2, byteorder="little")
             ADDR_H = ADDR_BYTES[1]
             ADDR_L = ADDR_BYTES[0]
-            data_bytes = panpos.to_bytes(4, byteorder="little")
+            data_bytes = panpos.to_bytes(4, byteorder="little", signed=True)
             data_31_24 = data_bytes[3]
             data_23_16 = data_bytes[2]
             data_15_8 = data_bytes[1]
@@ -503,10 +509,19 @@ class FrontBoardDriver:
             
     def setAngles(self, pan, tilt=None, pan_speed=None, tilt_speed=None):
         if pan < -90 or pan > 90:
-            raise ValueError("Pan out of range. Must be between -90 and 90.")
-        if tilt < 0 or tilt > 40:
-            raise ValueError("Tilt out of range. Must be between 0 and 40.")
-
+            print("Pan out of range. Must be between -90 and 90.")
+            if pan <= -90:
+                pan = -89
+            elif pan >= 90: 
+                pan = 89
+        if tilt < -5 or tilt > 40:
+            print("Tilt out of range. Must be between 0 and 40.")
+            if tilt <= -5:
+                tilt = -5
+            elif tilt >= 40: 
+                tilt = 39
+                
+        
         # Mapping the range -90 to 90 degrees to 0 to 4095
         # The formula for linear mapping is:
         # output = (input - input_min) * (output_max - output_min) / (input_max - input_min) + output_min
@@ -524,38 +539,37 @@ class FrontBoardDriver:
         tilt_dynamixel_value = int((tilt - tilt_input_min) * (tilt_output_max - tilt_output_min) / (tilt_input_max - tilt_input_min) + tilt_output_min)
         
         self.groupDynamixelSetPosition(panpos = pan_dynamixel_value, tiltpos = tilt_dynamixel_value)
-        
+        return True
         
     def testPan(self):
-        self.setAngles(pan = -90, tilt = 0)
+        self.setAngles(pan = 0, tilt = 0)
         time.sleep(1)
         for panAngle in range(-90, 90):
-            self.setAngles(pan = panAngle, tilt = 0)
+            self.setAngles(pan = panAngle*0.5, tilt = 0)
             time.sleep(0.1)
         time.sleep(1)
         self.setAngles(pan = 0, tilt = 0)
-        
         
     def testTilt(self):
         self.setAngles(pan = 0, tilt = 0)
         time.sleep(1)
-        for tiltAngle in range(0, 40):
+        for tiltAngle in range(-5, 40):
             self.setAngles(pan = 0, tilt = tiltAngle)
             print(tiltAngle)
             time.sleep(0.1)
-        for tiltAngle in reversed(range(0, 40)):
+        for tiltAngle in reversed(range(-5, 40)):
             print(tiltAngle)
             self.setAngles(pan=0, tilt=tiltAngle)
             time.sleep(0.1)
-        
-        
             
-#if __name__ == "__main__":
-    #driver = FrontBoardDriver()
-    #driver.turnOffTorque()
+if __name__ == "__main__":
+    driver = FrontBoardDriver()
+    driver.turnOffTorque()
+    #driver.getPanPID()
+    #driver.setTiltPID(2500, 500, 1000)
     #driver.testPan()
     #driver.testTilt()
-    
+    #driver.setAngles(pan=0, tilt=30)
     #driver.getTiltPID()
     #driver.testTilt()
     #driver.setAngles(pan=0, tilt= 0)
