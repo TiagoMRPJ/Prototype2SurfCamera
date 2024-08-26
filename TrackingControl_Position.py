@@ -15,13 +15,14 @@ commands = db.Commands(conn)
 cam_state = db.CameraState(conn)
 
 IO = GPIO.FrontBoardDriver()
-
+IO.setPanPositionControl()
+IO.turnOnTorque()
 Zoom = ZoomController.SoarCameraZoomFocus()
 
 lower_distance = 0
 upper_distance = 0
 
-
+'''
 distance_zoom_table = {
     1:1,
     15:1,
@@ -36,14 +37,14 @@ distance_zoom_table = {
     300:15
     # Add as many mappings as needed, making sure they are ordered
 }
-
 '''
+
 distance_zoom_table = {
     0:0,
     30:0,
     400:15
 }
-   ''' 
+    
 
 
 
@@ -105,8 +106,8 @@ def zoomCalculations():
     global trackDistX
     
     # Find between which 2 mapped values trackDistx fits. This assumes distance_zoom_table is sorted
-    lower_distance = max([d for d in distance_zoom_table if d <= trackDistX], default=1)
-    upper_distance = min([d for d in distance_zoom_table if d >= trackDistX], default=15)
+    lower_distance = max([d for d in distance_zoom_table if d <= trackDistX], default=None)
+    upper_distance = min([d for d in distance_zoom_table if d >= trackDistX], default=None)
     
     if lower_distance == upper_distance:
         new_zoom_level = distance_zoom_table[lower_distance]
@@ -115,7 +116,7 @@ def zoomCalculations():
         x0, y0 = lower_distance, distance_zoom_table[lower_distance]
         x1, y1 = upper_distance, distance_zoom_table[upper_distance]
         new_zoom_level = y0 + (trackDistX - x0) * (y1-y0) / (x1-x0)
-        new_zoom_level = round(new_zoom_level*1.25, 3)
+        new_zoom_level = round(new_zoom_level, 1)
     
     if commands.camera_zoom_value is None or abs(new_zoom_level - commands.camera_zoom_value) >= 0.001:
         Zoom.set_zoom_position(new_zoom_level)
@@ -150,20 +151,15 @@ def update_calibration_file(key, value):
         except Exception as e:
             print(f"Error writing to the file calibration_data: {e}")
 
-panBuffer = deque(maxlen=3)
-timeBuffer = deque(maxlen=3)
-
-'''
-Ignorar tracking se distancia < 50m
-'''
-
+panBuffer = deque(maxlen=4)
+timeBuffer = deque(maxlen=4)
 
 def main(d):
-    Zoom = ZoomController.SoarCameraZoomFocus()
-    
     panAngle = None
     last_read_time = None
-    panSpeed = 0
+    panSpeed = None
+    #panBuffer = deque(maxlen=4)
+    #timeBuffer = deque(maxlen=4)
     
     commands.tracking_enabled = False
     
@@ -210,11 +206,14 @@ def main(d):
                 
             if gps_points.new_reading:
                 gps_points.new_reading = False
-                last_read_time = time.time()
                 panAngle = panCalculations()
                 tiltAngle = tiltCalculations()
                 zoomCalculations()
-            
+                IO.setAngles(pan = panAngle, tilt = tiltAngle + gps_points.tilt_offset)
+                print(f"Pan: {panAngle} ; Tilt: {tiltAngle + gps_points.tilt_offset}")
+                
+                last_read_time = time.time()
+                
                 # Before appending the new value check if it follows the previous Trend
                 # If it does, append it to the array and continue as is
                 # If not, sudden change of direction or stop has occured -> clear buffer and start filling
@@ -223,42 +222,60 @@ def main(d):
                     timeBuffer.append(last_read_time)   
                     panSpeed = average_pan_speed(panBuffer, timeBuffer)
                 else:
+                    #print("CHANGE OF DIRECTION OR SUDDEN STOP HAVE BEEN DETECTED, CLEARING TENDENCY BUFFERS")
                     panBuffer.clear()
                     timeBuffer.clear()
                     panBuffer.append(panAngle)
                     timeBuffer.append(last_read_time)   
                     panSpeed = average_pan_speed(panBuffer, timeBuffer)
-                    
-                print(f"Current Pan Speed is {panSpeed}")
                 
-                if trackDistX >= 15: # Only track if target is away from the camera
-                    speed_control_mode_threshold = 0.6
-                    if abs(panSpeed) < speed_control_mode_threshold:
-                        ''' Position Control for accuracy at low speeds  '''
-                        IO.setPanPositionControl()
-                        IO.setAngles(pan = panAngle, tilt = tiltAngle + gps_points.tilt_offset)
-                        print(f"Position Control        Pan: {panAngle} ; Tilt: {tiltAngle + gps_points.tilt_offset}")
-                    elif abs(panSpeed) >= speed_control_mode_threshold and abs(panSpeed) <= 15:
-                        ''' Velocity Control for a smooth pan movement at considerable speeds '''
-                        IO.setPanVelocityControl()
-                        IO.setPanGoalVelocity(panSpeed)
-                        IO.setTiltAngle(tilt = tiltAngle + gps_points.tilt_offset)
-                        print(f"Velocity Control        PanSpeed = {panSpeed} ; Tilt: {tiltAngle + gps_points.tilt_offset}")
-                else:
-                    print("Tracking is enabled but target is too close to track")
                     
-            else:   # No new readings, make sure pan doesnt keep rotating at constant speed
-                if time.time() - last_read_time > 3:
-                    IO.setPanPositionControl()
-                    IO.setAngles(pan = panAngle, tilt = tiltAngle + gps_points.tilt_offset)
-                
-        else:   # If not tracking
-            IO.setPanPositionControl()
-            IO.setPanGoalVelocity(0)
-            IO.setAngles(pan = 0, tilt= 5)
+            '''
+            Trend following for Pan smoothing at considerable speeds
+            '''
+            if panSpeed and abs(panSpeed) > 0.5 and abs(panSpeed) < 20 and time.time() - last_read_time >= 0.1:
+                panAngle = panAngle + panSpeed * 1 * (time.time() - last_read_time)
+                last_read_time = time.time()
+                IO.setAngles(pan = panAngle, tilt = tiltAngle + gps_points.tilt_offset)
+        
+        
+                ''' #Possible auto-recording pseudo implementation
+                if last_rotation is not None and last_time is not None and cam_state.enable_auto_recording:
+                    # Calculate the time interval
+                    current_time = time.time()
+                    time_interval = current_time - last_time
+                    
+                    # Calculate pan speed
+                    pan_speed = calculate_pan_speed(panAngle, last_rotation, time_interval)
+                    speed_buffer.append(pan_speed)
+                    if len(speed_buffer) > 1:
+                        average_speed = sum(speed_buffer) / len(speed_buffer)
+                    else:
+                        average_speed = pan_speed
+                    
+                    # Check if speed exceeds the threshold
+                    if average_speed > speed_threshold:
+                        # Start recording if not already started
+                        if not cam_state.start_recording:
+                            cam_state.start_recording = True
+                            print("Start recording due to increased pan speed")
+                        stop_timer = 0  # Reset stop timer
+                    elif cam_state.start_recording:
+                        # Increment stop timer if already recording
+                        stop_timer += time_interval
+                        if stop_timer >= stop_duration_threshold:
+                            cam_state.start_recording = False
+                            print("Stop recording due to lack of pan movement")
+                    
+                    # Update last rotation and time
+                    last_rotation = panAngle
+                    last_time = current_time
+                '''
+                    
+        else:
+            IO.setAngles(pan = 0, tilt= 0)
             Zoom.set_zoom_position(2)
-            panBuffer.clear()
-            timeBuffer.clear()
+
             
 def average_pan_speed(pan_values, timestamps):
     if len(pan_values) != len(timestamps):
@@ -303,6 +320,10 @@ def tendency(value, array):
         return False
     
     return True # this means the new value follows the trend --> return True
+        
+                  
+    
+    
           
 if __name__ == "__main__":
     main({"stop": False}) 

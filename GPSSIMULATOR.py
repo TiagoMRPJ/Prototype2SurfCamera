@@ -30,7 +30,7 @@ class FakeTracker:
             if self.commands.tracking_enabled:
                 coordinates = self.get_coordinates()
                 for coordinate in coordinates:
-                    sleept = 0.4 + random.uniform(-0.1, 0.25)
+                    sleept = 0.4 + random.uniform(-0.15, 0.3)
                     time.sleep(sleept)
                     lat, lon = coordinate.split(',')
                     position = {"latitude": float(lat), "longitude": float(lon)}

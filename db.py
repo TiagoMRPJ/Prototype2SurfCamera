@@ -57,7 +57,7 @@ class GPSData:
         self.client.set_initial("transmission_fix", False)  
         self.client.set_initial("new_reading", False)                 # Flag to indicate a new reading has come in
         self.client.set_initial("tilt_offset", 0 )                    # Used to manually fine adjust tilt calibration
-        self.client.set_initial("camera_vertical_distance", 2)        # Variable to store the fixed value of the camera vertical position 
+        self.client.set_initial("camera_vertical_distance", 8)        # Variable to store the fixed value of the camera vertical position 
         
     @property
     def camera_origin(self):

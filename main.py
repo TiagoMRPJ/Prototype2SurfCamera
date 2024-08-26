@@ -2,9 +2,10 @@
 import time
 import Camera
 import RadioGps
+#import TrackingControl_Position
 import TrackingControl
 import WebServer
-import GPSSIMULATOR
+#import GPSSIMULATOR
 
 from multiprocessing import Process, Manager
 import redis
@@ -17,8 +18,8 @@ PERSISTENT_FILENAME = "db.txt"
 
 PROCESSES = [
     Camera,
-    #RadioGps,
-    GPSSIMULATOR,
+    RadioGps,
+    #GPSSIMULATOR,
     TrackingControl,
     WebServer
 ]

@@ -2,10 +2,11 @@ import math
 import random
 
 # Constants
-START_LAT = 38.7301223211142
-START_LON = -9.47591882827879
-SPEED_M_S = 2  # meters per second
-TIME_INTERVAL = 1  # seconds between points
+
+START_LAT = 38.73035966134223 
+START_LON = -9.47818632793749
+SPEED_M_S = 5  # meters per second
+TIME_INTERVAL = 0.45 # seconds between points
 EARTH_RADIUS = 6371000  # meters (mean radius of Earth)
 
 
@@ -21,10 +22,11 @@ distance_traveled = 0
 
 # Generate coordinates
 coordinates = []
-for _ in range(100):  # Number of points
+for _ in range(120):  # Number of points
     coordinates.append(f"{lat},{lon}")
     distance_traveled += SPEED_M_S * TIME_INTERVAL
     lon += lon_offset(SPEED_M_S * random.uniform(0.5,1.5), lat)
+
 
 # Write to file
 with open(r"fakegpsdata.txt", "w+") as file:

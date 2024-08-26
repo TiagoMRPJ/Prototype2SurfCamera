@@ -28,6 +28,12 @@ class SoarCameraZoomFocus:
                     except Exception as e:
                         print("Connection error: {e}")
             time.sleep(0.1)   
+        
+        # Set the zoom speed to the minimum on both directions
+        self.set_zoom_speed(0, "tele")
+        time.sleep(1)
+        self.set_zoom_speed(0, "wide")
+        time.sleep(1)
     
         
     def testSerialReception(self):
@@ -89,6 +95,9 @@ class SoarCameraZoomFocus:
         self.sendMsg(zoom_in_command)
         
     def set_zoom_position(self, zoomValue):
+        '''
+        Sets the camera's zoom to a value between 1x and 30x
+        '''
         
         zoomValue = max(min(zoomValue,30), 0)
         
@@ -119,10 +128,22 @@ class SoarCameraZoomFocus:
         zoom_command = [0x81, 0x01, 0x04, 0x47, p, q, r, s, 0xFF]
         self.sendMsg(zoom_command)
         
-    
+    def set_zoom_speed(self, zoomSpeedValue, direction="tele"):
+        '''
+        Sets the zoom speed. 
+        zoomSpeedValue should be an integer between 0 and 7.
+        direction can be either "tele" for zooming in or "wide" for zooming out.
+        '''
+        # Ensure the speed value is within the valid range (0 to 7)
+        zoomSpeedValue = max(min(zoomSpeedValue, 7), 0)
         
-if __name__ == "__main__":
-    ZF = SoarCameraZoomFocus()
-    ZF.set_zoom_position(25)
-    
-
+        # Determine the command based on the direction
+        if direction == "tele":
+            zoom_command = [0x81, 0x01, 0x04, 0x07, 0x20 | zoomSpeedValue, 0xFF]
+        elif direction == "wide":
+            zoom_command = [0x81, 0x01, 0x04, 0x07, 0x30 | zoomSpeedValue, 0xFF]
+        else:
+            raise ValueError("Direction must be 'tele' (zoom in) or 'wide' (zoom out)")
+        
+        # Send the zoom speed command
+        self.sendMsg(zoom_command)
