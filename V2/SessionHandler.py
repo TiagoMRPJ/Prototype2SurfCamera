@@ -55,6 +55,7 @@ def calculate_distance_and_speed(file_path):
     prev_lat, prev_lon, prev_time = None, None, None
 
     with open(file_path, 'r') as file:
+        print(file_path)
         for line in file:
             lat, lon, timestamp = line.strip().split(',')
             lat, lon = float(lat), float(lon)
@@ -63,7 +64,8 @@ def calculate_distance_and_speed(file_path):
                 prev_loc = utils.Location(prev_lat, prev_lon)
                 loc = utils.Location(lat, lon)
                 # Calculate distance between two points
-                distance = utils.get_distance_between_locations(prev_loc, loc)
+                distance = utils.get_distance_between_locations(prev_loc, loc) # Returns distance in meters
+                
                 total_distance += distance
                 
                 # Calculate time difference in hours
@@ -71,11 +73,12 @@ def calculate_distance_and_speed(file_path):
                 if time_diff > 0:
                     # Calculate speed (distance / time)
                     speed = distance / time_diff
+                    print(speed)
                     max_speed = max(max_speed, speed)
             
             # Update previous values
             prev_lat, prev_lon, prev_time = lat, lon, current_time
-
+        
     return total_distance, max_speed
 
 def get_gps_stats(sessionID):
@@ -98,8 +101,11 @@ def get_gps_stats(sessionID):
 
     return round(cumulative_dist/1000, 2), round(max_speed*3.6, 1), waveid_max_speed, get_wave_count(sessionID) 
 
-session = 'demo'
-dist, speed, wave, count = get_gps_stats(session)
-print(f"Surfed a cumulative distance of {dist} km")
-print(f"Reached a MaxSpeed of {speed} km/h on Wave {wave}")
-print(f"WaveCount: {count}")
+if __name__ == "__main__":
+    session = '25_09_24'
+    dist, speed, wave, count = get_gps_stats(session)
+    print(f"Surfed a cumulative distance of {dist} km")
+    print(f"Reached a MaxSpeed of {speed} km/h on Wave {wave}")
+    print(f"WaveCount: {count}")
+    
+    #calculate_distance_and_speed("/home/IDMind/Documents/V1/gps_logs/145917.txt")
