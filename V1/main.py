@@ -1,14 +1,13 @@
 #! /usr/bin/python
 import time
+import sys
 
 import Camera
 import RadioGps
 import TrackingControl
 import WebServer
-
-import sys
 sys.path.append('/home/IDMind/Documents/V1/gps_simulator')
-
+#import GPSSIMULATOR
 
 from multiprocessing import Process, Manager
 import redis
@@ -17,10 +16,11 @@ from db import RedisClient
 r = redis.Redis()
 client = RedisClient(r)
 
-PERSISTENT_FILENAME = "db.txt"
+PERSISTENT_FILENAME = "/home/IDMind/Documents/V1/db.txt"
 
 PROCESSES = [
     Camera,
+    #GPSSIMULATOR,
     RadioGps,
     TrackingControl,
     WebServer

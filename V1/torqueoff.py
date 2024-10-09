@@ -24,7 +24,25 @@ def testPan(io):
   io.setPanGoalVelocity(0)
 
 if __name__ == "__main__":
-    io = IOBoardDriver.FrontBoardDriver()
-    io.setPanPositionControl()
-    io.setAngles(pan = -10, tilt = 0)
+  io = IOBoardDriver.FrontBoardDriver()
+  io.setPanPositionControl()
+  io.setAngles(pan=-5, tilt=0, pan_speed=6)
+
+   
     
+  """ io.setPanVelocityControl()
+  io.setPanGoalVelocity(0)
+  print(io.getCurrentPanAngle())
+  io.setPanGoalVelocity(1)
+  t = time.time()
+  while time.time() - t <= 10:
+    print(io.getCurrentPanAngle())
+  io.setPanGoalVelocity(0)
+  
+  io.setPanPositionControl()
+  io.setAngles(pan=0, tilt=0)
+  t = time.time() """
+
+  """ import Zoom
+  z = Zoom.SoarCameraZoomFocus()
+  z.set_zoom_position(5) """

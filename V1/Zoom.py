@@ -1,5 +1,4 @@
 import numpy as np
-#import cv2
 import serial.tools.list_ports
 import time
 import math
@@ -34,7 +33,6 @@ class SoarCameraZoomFocus:
         time.sleep(2)
         self.set_zoom_speed(0, "wide")
         time.sleep(2)
-    
         
     def testSerialReception(self):
         try:

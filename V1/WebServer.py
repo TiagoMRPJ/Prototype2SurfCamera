@@ -13,6 +13,7 @@ def main(d):
     gps_points = db.GPSData(conn)
     commands = db.Commands(conn)
     camera_state = db.CameraState(conn)
+    webapp = db.WebApp(conn)
     
     app = Flask(__name__)
     
@@ -86,12 +87,12 @@ def main(d):
         commands.tracking_enabled = False
         return jsonify({ "success": True, "message": "OK" })
 
-    @app.route('/update_zoom_value', methods=["POST"])
-    def update_zoom_value():
-        zoom_val = request.json.get('zoom_value', 0)
-        zoom_controller = Zoom.SoarCameraZoomFocus()
-        zoom_controller.set_zoom_position(zoom_val)
-        print("Flask Updating Zoom")
+    @app.route('/update_zoom_multiplier', methods=["POST"])
+    def update_zoom_multiplier():
+        zoom_multiplier = request.json.get('zoom_multiplier', 1)
+        commands.camera_zoom_multiplier = zoom_multiplier
+        #print(commands.camera_zoom_multiplier)
+        print("Flask Updating Zoom Multiplier")
         return jsonify({"success": True, "message": "Values Updated!"})
     
     @app.route('/update_vertical_distance_value', methods=["POST"])
@@ -147,18 +148,9 @@ def main(d):
         print("flask calibrate_heading")
         commands.camera_calibrate_heading = True
         return jsonify({ "success": True, "message": "OK" })
-
     
-    def gen():
-        """Video streaming generator function."""
-        while True:
-            yield camera_state.image
-            time.sleep(0.15)
- 
-    @app.route('/video_feed')
-    def video_feed():
-        """Video streaming route. Put this in the src attribute of an img tag."""
-        return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    
+    
     
     @app.route('/shutdown_surf')
     def shutdown_surf():
@@ -166,12 +158,18 @@ def main(d):
         from subprocess import call
         import IOBoardDriver as IO
         frontboard = IO.FrontBoardDriver()
-        frontboard.setShutdown(seconds=10)
+        frontboard.setShutdown(seconds=5)
         time.sleep(1)
         call("sudo shutdown -h now", shell=True)
         return jsonify({ "success": True, "message": "OK" })
     
-
+    @app.route('/update_sessionid', methods=["POST"])
+    def update_sessionid():
+        """Route to SessionID """
+        sessionid = request.json.get('sessionid', 0)
+        webapp.SessionID = sessionid
+        print(f"Flask Updating SessionID {sessionid}")
+        return jsonify({"success": True, "message": "Values Updated!"})
     
     def start_server():
         print("starting server")

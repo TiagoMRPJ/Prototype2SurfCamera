@@ -3,6 +3,8 @@ import serial.tools.list_ports
 import time
 import db
 import threading
+import os
+
 
 '''
 Process responsible for handling the Serial Communication with the Radio receiver to continuously update the latest GPS data.
@@ -33,27 +35,27 @@ distance = 0
 newRead = False
 
 class ReadLine:
-    def __init__(self, s):
-        self.buf = bytearray()
-        self.s = s
+	def __init__(self, s):
+		self.buf = bytearray()
+		self.s = s
 
-    def readline(self):
-        i = self.buf.find(b"\n")
-        if i >= 0:
-            r = self.buf[:i+1]
-            self.buf = self.buf[i+1:]
-            return r
-        while True:
-            i = max(1, min(2048, self.s.in_waiting))
-            data = self.s.read(i)
-            i = data.find(b"\n")
-            if i >= 0:
-                r = self.buf + data[:i+1]
-                self.buf[0:] = data[i+1:]
-                return r
-            else:
-                self.buf.extend(data)
-                
+	def readline(self):
+		i = self.buf.find(b"\n")
+		if i >= 0:
+			r = self.buf[:i+1]
+			self.buf = self.buf[i+1:]
+			return r
+		while True:
+			i = max(1, min(2048, self.s.in_waiting))
+			data = self.s.read(i)
+			i = data.find(b"\n")
+			if i >= 0:
+				r = self.buf + data[:i+1]
+				self.buf[0:] = data[i+1:]
+				return r
+			else:
+				self.buf.extend(data)
+				
 rl = ReadLine(ser)
 
 def receive():
@@ -84,21 +86,25 @@ def decode(line):
 		print('ERROR: ',line)
   
 def Rx_thread():
-    while True:
-        receive()
-        time.sleep(0.05)
+	while True:
+		receive()
+		time.sleep(0.05)
   
 def main(d):
 	global lastLat, lastLon, newRead, distance
 	conn = db.get_connection()
 	gps_points = db.GPSData(conn)
 	camera_state = db.CameraState(conn)
+	webapp = db.WebApp(conn)
 	gps_points.gps_fix = False
 	gps_points.transmission_fix = False
 	time_new_read = time.time()
+ 
+	cur_dir = ""	# used for gps logging with appropriate file path and name
+	lastwavenr = -1
 		
 	rec_Thread = threading.Thread(target=Rx_thread)
-	rec_Thread.daemon = True #Make so that it stops when the main on stops
+	rec_Thread.daemon = True                        #  so that it stops when the main one stops
 	rec_Thread.start()
 	
 	try:
@@ -109,14 +115,14 @@ def main(d):
 				gps_points.gps_fix = False 			# Just so that both LEDS turn OFF 
 			else:
 				gps_points.transmission_fix = True	
-    
+	
 			if newRead:
-				#print(  round(1 / (time.time() - time_new_read, 1)))	# Receiving frequency
 				time_new_read = time.time()
 				position = {"latitude": float(lastLat), "longitude": float(lastLon)}
 				gps_points.latest_gps_data = position
-				print(f"{gps_points.latest_gps_data['latitude']}, {gps_points.latest_gps_data['longitude']}, {sats}, {rssi}")
-    
+				gps_points.last_gps_time = time_new_read
+				#print(f"{gps_points.latest_gps_data['latitude']}, {gps_points.latest_gps_data['longitude']}, {sats}, {rssi}")
+	
 				if sats >= 5:					# If the tracker has a fix with more than 5 sattelites turn ON the led indicating gps fix
 					gps_points.gps_fix = True
 				else:
@@ -124,16 +130,31 @@ def main(d):
 		
 				gps_points.new_reading = True
 				newRead = False
-    
+	
+				if not camera_state.is_recording: 
+						
+					if webapp.SessionID != "-1":
+						new_dir = f"/home/IDMind/Documents/V1/gps_logs/{webapp.SessionID}"
+					else:
+						new_dir = f"/home/IDMind/Documents/V1/gps_logs/other"
+			
+					if new_dir != cur_dir:
+						cur_dir = new_dir
+						create_directory_if_not_exists(cur_dir)
+
+					filegpslog = open(os.path.join(cur_dir, f"{camera_state.wave_nr}.txt"), "w")
+		   
 				if camera_state.is_recording and True:	# If the Camera is recording, also log the gps coordinates in a file with the same timestamp
-					print("IS RECORDING - GPS IS LOGGING")
-					with open(f'/home/IDMind/Documents/V1/gps_logs/{camera_state.timeStamp}.txt', 'a+') as f:
-						f.write(f"{lastLat}, {lastLon}, {time.time()}\n")
+						filegpslog.write(f"{lastLat}, {lastLon}, {time.time()}\n")
 			
 	except KeyboardInterrupt:
 		rec_Thread.join()
 		pass
 
+def create_directory_if_not_exists(directory_path):
+	os.makedirs(directory_path, exist_ok=True)
+	#print(f"Directory '{directory_path}' is ready.")
+
 if __name__ == "__main__":
-    main({"stop": False})
-    
+	main({"stop": False})
+	

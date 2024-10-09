@@ -1,6 +1,8 @@
 import serial
 import time
 from serial.tools import list_ports
+import db
+
 
 '''
 Defines a lower level class to handle communication between the Raspberry Pi and the control electronics which handle the front IO
@@ -8,7 +10,7 @@ and communication bridge with the servos.
 
 '''
 
-PAN_GEAR_RATIO = 4.5
+PAN_GEAR_RATIO = 40
 
 def get_op_codes():
         '''
@@ -51,15 +53,18 @@ class FrontBoardDriver:
         
         self.setTiltPID(4000, 0, 2000)
         self.dynamixelWrite(1, 108, 3) # Set Tilt profile acceleration 
-        self.dynamixelWrite(1, 112, self.toDynamixelVelocity(10))   # Set Tilt profile velocity
+        self.dynamixelWrite(1, 112, self.toDynamixelVelocity(5))   # Set Tilt profile velocity
         #self.setTiltPID(5000, 1, 10)
 
+        self.PanCenterPulse = self.dynamixelRead(2, 132)  
         
-        _, _, panpos, _ = self.bulkReadPosVel() # Used to find out the center zero position of the pan
-        self.PanCenterPulse = panpos        
         
-    
-     
+        conn = db.get_connection()
+        self.commands = db.Commands(conn)
+        
+        self.panIntendedPlayTime = 0.2 # How much time we want each pan movement to take
+        self.lastPanAngle = 0
+        
     def send_message(self, msg):
         """
             Writes a pre-built Message to the serial port and checks for successful transmission
@@ -194,8 +199,8 @@ class FrontBoardDriver:
         # Extracting individual bits
         ButtonPressed = (msg >> 1) & 1  # Extracting the second last bit
         ShutdownSequence = msg & 1          # Extracting the last bit
-        print(f"Is the button pressed: {ButtonPressed} and Is Shutting Down?: {ShutdownSequence}")
-        return ButtonPressed, ShutdownSequence
+        #print(f"Is the button pressed: {ButtonPressed} and Is Shutting Down?: {ShutdownSequence}")
+        return ShutdownSequence
     
     def setShutdown(self, seconds=15):
         bytes_val = seconds.to_bytes(2, 'little') 
@@ -254,7 +259,8 @@ class FrontBoardDriver:
         response = self.bsr_message(self.command_codes["Dynamixel Read"], data2send)
         
         data_bytes = response[-4:]
-        result = int.from_bytes(data_bytes, byteorder='big')
+        result = int.from_bytes(data_bytes, byteorder='big', signed=True)
+        return result
         
     def dynamixelWrite(self, ID, ADDR, data):
         ADDR_bytes = ADDR.to_bytes(2, byteorder="little")
@@ -293,12 +299,12 @@ class FrontBoardDriver:
         
         data2send = bytearray([NCOMMANDS, ID1, ADDR_H, ADDR_L, data_31_24, data_23_16, data_15_8, data_7_0, ID2, ADDR_H, ADDR_L, data_31_24, data_23_16, data_15_8, data_7_0])
         response = self.bsr_message(self.command_codes["Group Dynamixel Write"], data2send)
-        print("Torque Turned ON on both Axis")
+        #print("Torque Turned ON on both Axis")
         
         self.setTiltPID(4000, 0, 2000)
         
-        self.dynamixelWrite(1, 108, 1) # Set Tilt profile acceleration 
-        self.dynamixelWrite(1, 112, self.toDynamixelVelocity(3))   # Set Tilt profile velocity
+        self.dynamixelWrite(1, 108, 10) # Set Tilt profile acceleration 
+        self.dynamixelWrite(1, 112, self.toDynamixelVelocity(10))   # Set Tilt profile velocity
         
     def turnOffTorque(self):
         ID1 = 0x01
@@ -320,7 +326,7 @@ class FrontBoardDriver:
         
         data2send = bytearray([2, ID1, ADDR_H, ADDR_L, data_31_24, data_23_16, data_15_8, data_7_0, ID2, ADDR_H, ADDR_L, data_31_24, data_23_16, data_15_8, data_7_0])
         response = self.bsr_message(self.command_codes["Group Dynamixel Write"], data2send)
-        print("Torque Turned OFF on both Axis")
+        #print("Torque Turned OFF on both Axis")
         
     def getPanPID(self):
         ADDR = [80, 82, 84]
@@ -432,7 +438,7 @@ class FrontBoardDriver:
         
         data2send = bytearray(msg)
         response = self.bsr_message(self.command_codes["Group Dynamixel Write"], data2send)
-        print("Pan PID Parameters Updated")
+        #print("Pan PID Parameters Updated")
         
     def setPanVelocityPI(self, P, I):
         ID = 2
@@ -463,7 +469,7 @@ class FrontBoardDriver:
         
         data2send = bytearray(msg)
         response = self.bsr_message(self.command_codes["Group Dynamixel Write"], data2send)
-        print("Pan PID Parameters Updated")
+        #print("Pan PID Parameters Updated")
 
     def setTiltPID(self, P, I, D):
         ID = 1
@@ -504,7 +510,7 @@ class FrontBoardDriver:
         
         data2send = bytearray(msg)
         response = self.bsr_message(self.command_codes["Group Dynamixel Write"], data2send)
-        print("Tilt PID Parameters Updated")
+        #print("Tilt PID Parameters Updated")
         
     def int_to_signed_bytes(self, value, length):
         # Check if the integer is negative
@@ -575,26 +581,13 @@ class FrontBoardDriver:
             response = self.bsr_message(self.command_codes["Group Dynamixel Write"], data2send)
         else:
             return
-            
+
+        
     def setAngles(self, pan, tilt=None, pan_speed=None, tilt_speed=None):        
-        
-        if pan < -90 or pan > 90:
-            print("Pan out of range. Must be between -90 and 90.")
-            if pan <= -90:
-                pan = -89
-            elif pan >= 90: 
-                pan = 89
-        if tilt < -10 or tilt > 40:
-            print("Tilt out of range. Must be between 0 and 40.")
-            if tilt <= -10:
-                tilt = -10
-            elif tilt >= 40: 
-                tilt = 39
+
+        pan = min(max(-90, pan), 90)
+        tilt = min(max(0, tilt), 45)
                 
-        
-        # Mapping the range -90 to 90 degrees to 0 to 4095
-        # The formula for linear mapping is:
-        # output = (input - input_min) * (output_max - output_min) / (input_max - input_min) + output_min
         pan_input_min = -90
         pan_input_max = 90
         #pan_output_min = -2045   
@@ -604,13 +597,21 @@ class FrontBoardDriver:
         pan_output_max = 1024
 
         tilt_input_min = 0
-        tilt_input_max = 40
-        tilt_output_min = 2050
+        tilt_input_max = 45
+        tilt_output_min = 1990
         tilt_output_max = 2500
 
-        #pan_dynamixel_value = self.PanCenterPulse + round(1.525 * int((pan - pan_input_min) * (pan_output_max - pan_output_min) / (pan_input_max - pan_input_min) + pan_output_min))
-        pan_dynamixel_value = self.PanCenterPulse + round(PAN_GEAR_RATIO * 1.1  * int((pan - pan_input_min) * (pan_output_max - pan_output_min) / (pan_input_max - pan_input_min) + pan_output_min))
+        pan_dynamixel_value = self.PanCenterPulse + round(PAN_GEAR_RATIO * int((pan - pan_input_min) * (pan_output_max - pan_output_min) / (pan_input_max - pan_input_min) + pan_output_min))
         tilt_dynamixel_value = int((tilt - tilt_input_min) * (tilt_output_max - tilt_output_min) / (tilt_input_max - tilt_input_min) + tilt_output_min)
+                
+        if pan_speed: # If pan_speed value is provided, use the given value
+            pan_speed = pan_speed
+        else: # #If not pan_speed value is provided, calculate the speed to achieve the desired playtime
+            anglediff = pan - self.getCurrentPanAngle()
+            pan_speed = anglediff / self.panIntendedPlayTime
+            pan_speed = min(abs(pan_speed), 6)#self.commands.max_pan_speed)
+
+        self.dynamixelWrite(2, 112, self.toDynamixelVelocity(pan_speed * 40))   # Set profile velocity
         
         self.groupDynamixelSetPosition(panpos = pan_dynamixel_value, tiltpos = tilt_dynamixel_value)
         return True
@@ -618,16 +619,11 @@ class FrontBoardDriver:
     def setTiltAngle(self, tilt):
         self.dynamixelWrite(2, 64, 1)   # Turn ON the torque on the pan motor
         
-        if tilt < -5 or tilt > 40:
-            print("Tilt out of range. Must be between 0 and 40.")
-            if tilt <= -5:
-                tilt = -5
-            elif tilt >= 40: 
-                tilt = 39
+        tilt  = min(max(0,tilt),45)
                 
         tilt_input_min = 0
-        tilt_input_max = 40
-        tilt_output_min = 2050
+        tilt_input_max = 45
+        tilt_output_min = 1990
         tilt_output_max = 2500
         
         tilt_dynamixel_value = int((tilt - tilt_input_min) * (tilt_output_max - tilt_output_min) / (tilt_input_max - tilt_input_min) + tilt_output_min)
@@ -661,9 +657,7 @@ class FrontBoardDriver:
             
     def toDynamixelVelocity(self, degrees_per_second):
         ''' Takes a velocity in º/s and converts it to the dynamixel units (integer multiples of 0.229 rpm) '''
-        #print(f"Motor Deg/s: {degrees_per_second}")
-        to_rpm = degrees_per_second / 6 # RPMs
-        #print(f"Motor RPM: {to_rpm}")
+        to_rpm = degrees_per_second / 6 
         unit = 0.229 # Dynamixel base unit in RPM. The servos work in integer multiples of this value
         dynamixel_val = to_rpm / unit
         dynamixel_val = max(min(abs(dynamixel_val), 2047), 0) # value range is 0 to 2047, but value will be limited by the velocity limit
@@ -671,36 +665,42 @@ class FrontBoardDriver:
             return -round(dynamixel_val) 
         return round(dynamixel_val)
     
-    def setPanVelocityControl(self, velocityLimit = 45):  
+    def setPanVelocityControl(self, velocityLimit = 250):  
         if self.current_pan_mode != "velocity":
             self.current_pan_mode = "velocity"
             self.dynamixelWrite(2, 64, 0)   # Turn OFF pan torque
             self.setPanGoalVelocity(0)
             self.dynamixelWrite(2, 11, 1)   # Set operating Mode (11) to Velocity Mode (1)
-            dyna_val = self.toDynamixelVelocity(velocityLimit)
+            dyna_val = self.toDynamixelVelocity(velocityLimit) # Max speed of the motor: 250/40 ~ 6º/s pan speed
             self.dynamixelWrite(2, 44, dyna_val)    # Set Velocity Limit (44)
             #self.setPanVelocityPI(1500, 1500)   # Over 10 deg/s
-            self.setPanVelocityPI(100, 1600)
-            
-            self.dynamixelWrite(2, 108, 5)  # Set profile acceleration 
+            self.setPanVelocityPI(160, 1600)
+            self.dynamixelWrite(2, 108, 50)  # Set profile acceleration 
             self.dynamixelWrite(2, 64, 1)   # Turn ON the torque on the pan motor
         
     def setPanPositionControl(self):
         if self.current_pan_mode != "position":
-            print("SETTING PAN TO POSITION MODE")
             self.current_pan_mode = "position"
             self.dynamixelWrite(2, 64, 0)   # Turn OFF pan torque
             self.setPanGoalVelocity(0)
             self.dynamixelWrite(2, 11, 4)  # Set operating mode to Extended position
             self.setPanPID(1500, 0, 150) 
-            self.dynamixelWrite(2, 108, 3) # Set profile acceleration 
-            self.dynamixelWrite(2, 112, self.toDynamixelVelocity(8))   # Set profile velocity
+            self.dynamixelWrite(2, 108, 15) # Set profile acceleration 
+            self.setProfileVelocity(120)
+            #self.dynamixelWrite(2, 112, self.toDynamixelVelocity(25))  # Set profile velocity: 0.229/40 * val  deg/s
             self.turnOnTorque()
+            
+    def setProfileVelocity(self, velocity):
+        dval = self.toDynamixelVelocity(velocity * 40)
+        self.dynamixelWrite(2, 112, dval)
         
     def setPanGoalVelocity(self, degreespersecond):
         ''' Sets the camera pan rotation speed in º/s when in velocity control mode'''
         dyna_val = self.toDynamixelVelocity(degreespersecond * PAN_GEAR_RATIO)
         self.dynamixelWrite(2, 104, dyna_val)    # Set Goal Velocity (104)
-        #print(f"Dynamixel Val: {dyna_val}")
-               
-
+        
+    def getCurrentPanAngle(self):
+        currentpulse = self.dynamixelRead(2, 132) 
+        dif = currentpulse - self.PanCenterPulse
+        angle = dif * 90 / 1024 / 40
+        return round(angle, 2)

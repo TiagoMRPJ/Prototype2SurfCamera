@@ -26,21 +26,35 @@ class FakeTracker:
         return coordinates
     
     def worker(self):
+        
+        ready = False
         while True:
-            if self.commands.tracking_enabled:
+            
+            if not self.commands.tracking_enabled and not ready:
+                ready = True
+                            
+            if self.commands.tracking_enabled and ready:
                 coordinates = self.get_coordinates()
+                lastt = 0
                 for coordinate in coordinates:
-                    sleept = 0.4 + random.uniform(-0.15, 0.3)
-                    time.sleep(sleept)
-                    lat, lon = coordinate.split(',')
+                    lat, lon, tstamp = coordinate.split(',')
+                    if lastt == 0:
+                        time.sleep(0.4)
+                    else:
+                        time.sleep(float(tstamp) - float(lastt))
                     position = {"latitude": float(lat), "longitude": float(lon)}
                     self.gps_points.latest_gps_data = position
                     self.gps_points.new_reading = True
+                    self.gps_points.last_gps_time = float(tstamp)
+                    lastt = float(tstamp)
+                ready = False
+                print("Simulation Cycle Complete")
+                
             else:
                 time.sleep(1)
                          
 def main(d):
-    fakegps = FakeTracker('fakegpsdata.txt')
+    fakegps = FakeTracker('/home/IDMind/Documents/V1/gps_simulator/fakegpsdata.txt')
     fakegps.worker()
     
 if __name__ == "__main__":

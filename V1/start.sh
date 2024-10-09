@@ -28,4 +28,4 @@ done
 sleep 5
 
 echo "Serial devices are now available. Running main.py..."
-python /home/IDMind/Documents/Prototype2SurfCamera/main.py
+python /home/IDMind/Documents/V1/main.py

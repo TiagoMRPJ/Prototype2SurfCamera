@@ -79,6 +79,8 @@ class GPSData:
         self.client.set_initial("new_reading", False)                 # Flag to indicate a new reading has come in
         self.client.set_initial("tilt_offset", 0)                    # Used to manually fine adjust tilt calibration
         self.client.set_initial("camera_vertical_distance", 8)        # Variable to store the fixed value of the camera vertical position 
+        self.client.set_initial("last_gps_time", 0)
+        
         
     @property
     def camera_origin(self):
@@ -161,16 +163,25 @@ class GPSData:
     def camera_vertical_distance(self, value):
         self.client.set("camera_vertical_distance", value)
         
+    @property
+    def last_gps_time(self):
+        return self.client.get("last_gps_time")
+
+    @last_gps_time.setter
+    def last_gps_time(self, value):
+        self.client.set("last_gps_time", value)
 
 class Commands:
     def  __init__(self, connection):
         self.client = RedisClient(connection)
-        self.client.set_initial("camera_calibrate_origin", False)    # Flag utilized to start the origin calibration process
-        self.client.set_initial("camera_calibrate_heading", False)   # Flag utilized to start the heading calibration process
-        self.client.set_initial("camera_zoom_value", 5)             # Zoom value to apply between 1 and 30
-        self.client.set_initial("camera_apply_zoom_value", False)
+        self.client.set_initial("camera_calibrate_origin", False)     # Flag utilized to start the origin calibration process
+        self.client.set_initial("camera_calibrate_heading", False)    # Flag utilized to start the heading calibration process
+        self.client.set_initial("camera_zoom_value", 1)
+        self.client.set_initial("camera_zoom_multiplier", 1)          # Used to increase/decrease the calculated zoom by a factor of 0.8-1.2x
         self.client.set_initial("tracking_enabled", False)            # Flag utilized to toggle tracking        
-        
+        self.client.set_initial("speed_control_mode_threshold", 0.5)  # Pan Speed to toggle velocity mode or position
+        self.client.set_initial("max_pan_speed", 6)                   # Max pan speed when in position mode
+    
     @property
     def camera_calibrate_origin(self):
         return self.client.get("camera_calibrate_origin")
@@ -196,12 +207,36 @@ class Commands:
         self.client.set("camera_zoom_value", value)
         
     @property
+    def camera_zoom_multiplier(self):
+        return self.client.get("camera_zoom_multiplier")
+
+    @camera_zoom_multiplier.setter
+    def camera_zoom_multiplier(self, value):
+        self.client.set("camera_zoom_multiplier", value)
+        
+    @property
     def tracking_enabled(self):
         return self.client.get("tracking_enabled")
 
     @tracking_enabled.setter
     def tracking_enabled(self, value):
         self.client.set("tracking_enabled", value)
+        
+    @property
+    def speed_control_mode_threshold(self):
+        return self.client.get("speed_control_mode_threshold")
+
+    @speed_control_mode_threshold.setter
+    def speed_control_mode_threshold(self, value):
+        self.client.set("speed_control_mode_threshold", value)
+        
+    @property
+    def max_pan_speed(self):
+        return self.client.get("max_pan_speed")
+
+    @max_pan_speed.setter
+    def max_pan_speed(self, value):
+        self.client.set("max_pan_speed", value)
         
 class CameraState:
     def __init__(self, connection):
@@ -210,6 +245,23 @@ class CameraState:
         self.client.set_initial("is_recording", False)
         self.client.set_initial("enable_auto_recording", False)
         self.client.set_initial("timeStamp", 0)
+        self.client.set_initial("video_file_path", "")
+    
+    @property
+    def wave_nr(self):
+        return self.client.get("wave_nr")
+
+    @wave_nr.setter
+    def wave_nr(self, v):
+        self.client.set("wave_nr", v) 
+        
+    @property
+    def video_file_path(self):
+        return self.client.get("video_file_path")
+
+    @video_file_path.setter
+    def video_file_path(self, v):
+        self.client.set("video_file_path", v)        
 
     @property
     def is_recording(self):
@@ -260,6 +312,7 @@ class WebApp:
     def __init__(self, connection):
         self.client = RedisClient(connection)
         self.client.set_initial("CameraID", 1) # Unique Camera Identifier
+        self.client.set_initial("CameraSecurityToken", 'xxx')
         self.client.set_initial("SessionID", -1) # Indicates the current SessionID: Also tells if there's a session in place or not. If SessionID is -1 there's no session
         self.client.set_initial("SessionStartTime", 0)
         self.client.set_initial("Uploading_Route", '')
@@ -272,6 +325,14 @@ class WebApp:
     @CameraID.setter
     def CameraID(self, v):
         self.client.set("CameraID", v)
+        
+    @property
+    def CameraSecurityToken(self):
+        return self.client.get("CameraSecurityToken")
+
+    @CameraSecurityToken.setter
+    def CameraSecurityToken(self, v):
+        self.client.set("CameraSecurityToken", v)
 
     @property
     def PublicIP(self):

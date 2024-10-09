@@ -1,8 +1,8 @@
 {
   "camera_origin": {
-    "latitude": 38.64805553333333,
-    "longitude": -9.243726093333333
+    "latitude": 38.68065174,
+    "longitude": -9.336498279999999
   },
   "PublicIP": "94.62.143.3",
-  "camera_heading_angle": 2.161306650552275
+  "camera_heading_angle": 2.82
 }
